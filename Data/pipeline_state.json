@@ -1,0 +1,12 @@
+{
+  "last_checked": "2026-07-06T08:54:22.614441",
+  "last_known_latest": "2026-05",
+  "check_history": [
+    {
+      "checked_at": "2026-07-06T08:54:22.614475",
+      "latest_available": "2026-05",
+      "missing_count": 0,
+      "new_release": true
+    }
+  ]
+}

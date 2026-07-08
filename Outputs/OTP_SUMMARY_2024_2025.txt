@@ -1,0 +1,36 @@
+BTS On-Time Performance — Dataset Summary
+============================================================
+
+Year(s)          : 2024_2025
+Total flights    : 15,283,738
+Date range       : 2024-01-01 to 2025-12-31
+Unique carriers  : 10
+Unique aircraft  : 6,842
+On-time rate     : 79.0%
+Avg arrival delay: 7.8 mins
+
+Monthly breakdown:
+  January 2024     582,425 flights  avg delay +10.7m  on-time 73.5%
+  February 2024    552,691 flights  avg delay +0.4m  on-time 84.3%
+  March 2024       628,786 flights  avg delay +6.1m  on-time 79.3%
+  April 2024       619,920 flights  avg delay +5.2m  on-time 81.1%
+  May 2024         649,428 flights  avg delay +13.9m  on-time 73.3%
+  June 2024        651,799 flights  avg delay +11.5m  on-time 75.0%
+  July 2024        676,807 flights  avg delay +17.8m  on-time 69.1%
+  August 2024      660,639 flights  avg delay +10.5m  on-time 75.6%
+  September 2024   621,649 flights  avg delay +0.9m  on-time 84.6%
+  October 2024     656,283 flights  avg delay -1.4m  on-time 86.5%
+  November 2024    614,597 flights  avg delay -0.3m  on-time 85.4%
+  December 2024    631,944 flights  avg delay +7.4m  on-time 78.7%
+  January 2025     599,013 flights  avg delay +4.1m  on-time 79.0%
+  February 2025    559,577 flights  avg delay +6.0m  on-time 78.4%
+  March 2025       664,932 flights  avg delay +5.5m  on-time 80.0%
+  April 2025       644,084 flights  avg delay +5.7m  on-time 80.2%
+  May 2025         667,586 flights  avg delay +10.4m  on-time 76.0%
+  June 2025        674,179 flights  avg delay +16.1m  on-time 70.9%
+  July 2025        696,049 flights  avg delay +17.3m  on-time 69.9%
+  August 2025      666,242 flights  avg delay +8.8m  on-time 77.4%
+  September 2025   621,601 flights  avg delay +1.8m  on-time 83.7%
+  October 2025     668,332 flights  avg delay +5.3m  on-time 80.2%
+  November 2025    630,188 flights  avg delay +6.4m  on-time 77.9%
+  December 2025    644,987 flights  avg delay +13.5m  on-time 72.5%

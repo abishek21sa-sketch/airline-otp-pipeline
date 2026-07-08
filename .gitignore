@@ -1,0 +1,12 @@
+﻿Data/Raw/
+Data/Clean/
+Data/OTP_CONSOLIDATED_ALL.csv
+Data/OTP_UNIFIED_*.csv
+Data/OTP_YEAR_*.csv
+Data/OTP_APR2026.csv
+Data/OTP_SUMMARY_*.txt
+venv/
+__pycache__/
+*.zip
+*.pyc
+Logs/
