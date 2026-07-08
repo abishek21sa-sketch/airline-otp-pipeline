@@ -84,11 +84,23 @@ HF_REPO_ID = "Babbi21SA/airline-otp-data"
 # Hardcoded months — this ALWAYS works, no HF API calls
 # For Cloud — just a few months
 AVAILABLE_MONTHS = [
+    (2018, 1), (2018, 2), (2018, 3), (2018, 4), (2018, 5), (2018, 6),
+    (2018, 7), (2018, 8), (2018, 9), (2018, 10), (2018, 11), (2018, 12),
+    (2019, 1), (2019, 2), (2019, 3), (2019, 4), (2019, 5), (2019, 6),
+    (2019, 7), (2019, 8), (2019, 9), (2019, 10), (2019, 11), (2019, 12),
+    (2020, 1), (2020, 2), (2020, 3), (2020, 4), (2020, 5), (2020, 6),
+    (2020, 7), (2020, 8), (2020, 9), (2020, 10), (2020, 11), (2020, 12),
+    (2021, 1), (2021, 2), (2021, 3), (2021, 4), (2021, 5), (2021, 6),
+    (2021, 7), (2021, 8), (2021, 9), (2021, 10), (2021, 11), (2021, 12),
+    (2022, 1), (2022, 2), (2022, 3), (2022, 4), (2022, 5), (2022, 6),
+    (2022, 7), (2022, 8), (2022, 9), (2022, 10), (2022, 11), (2022, 12),
+    (2023, 1), (2023, 2), (2023, 3), (2023, 4), (2023, 5), (2023, 6),
+    (2023, 7), (2023, 8), (2023, 9), (2023, 10), (2023, 11), (2023, 12),
     (2024, 1), (2024, 2), (2024, 3), (2024, 4), (2024, 5), (2024, 6),
     (2024, 7), (2024, 8), (2024, 9), (2024, 10), (2024, 11), (2024, 12),
     (2025, 1), (2025, 2), (2025, 3), (2025, 4), (2025, 5), (2025, 6),
     (2025, 7), (2025, 8), (2025, 9), (2025, 10), (2025, 11), (2025, 12),
-    (2026, 1), (2026, 2), (2026, 3), (2026, 4), (2026, 5), 
+    (2026, 1), (2026, 2), (2026, 3), (2026, 4), (2026, 5),
 ]
 def detect_environment():
     """Detect if running locally or on Streamlit Cloud."""
@@ -99,7 +111,7 @@ def detect_environment():
     return "cloud", None
 
 
-@st.cache_data(show_spinner=False, ttl=3600)
+@st.cache_data(show_spinner=False, ttl=86400)
 def load_months_hf(selected_months):
     """Load specific months from Hugging Face with retry logic."""
     import io
@@ -1164,7 +1176,23 @@ def main():
         st.stop()
 
     st.sidebar.success(f"Loaded {len(df):,} flights")
+    
+    # Global date filter
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("📅 Date Range Filter")
+    min_date = df['FlightDate'].min().date()
+    max_date = df['FlightDate'].max().date()
+    date_range = st.sidebar.date_input(
+        "Filter by date",
+        value=(min_date, max_date),
+        min_value=min_date,
+        max_value=max_date
+    )
+    if len(date_range) == 2:
+        df = df[(df['FlightDate'].dt.date >= date_range[0]) & 
+                (df['FlightDate'].dt.date <= date_range[1])]
 
+    # Navigation
     # Navigation (shows for both local and cloud)
     page = st.sidebar.radio(
         "Navigation",
