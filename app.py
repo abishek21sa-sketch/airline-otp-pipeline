@@ -248,37 +248,44 @@ def build_sidebar(env, clean_dir, available_months):
     st.sidebar.markdown("---")
     st.sidebar.caption(f"Loading {len(filtered_months)} months of data")
 
-    # Pipeline update section
+    # Pipeline update section (local only)
     st.sidebar.markdown("---")
     st.sidebar.subheader("🔄 Pipeline")
-    state_file = r"C:\Users\abish\OneDrive\New\OneDrive\Desktop\Airlines\Data\pipeline_state.json"
-    if os.path.exists(state_file):
-        with open(state_file) as f:
-            state = json.load(f)
-        last_checked = state.get("last_checked", "Never")[:19] if state.get("last_checked") else "Never"
-        latest = state.get("last_known_latest", "Unknown")
-        st.sidebar.caption(f"Last checked: {last_checked}")
-        st.sidebar.caption(f"Latest on BTS: {latest}")
-    else:
-        st.sidebar.caption("No pipeline state found.")
+    
+    if env == "local":
+        # Only show pipeline controls on local environment
+        local_state_file = r"C:\Users\abish\OneDrive\New\OneDrive\Desktop\Airlines\Data\pipeline_state.json"
+        if os.path.exists(local_state_file):
+            try:
+                with open(local_state_file) as f:
+                    state = json.load(f)
+                last_checked = state.get("last_checked", "Never")[:19] if state.get("last_checked") else "Never"
+                latest = state.get("last_known_latest", "Unknown")
+                st.sidebar.caption(f"Last checked: {last_checked}")
+                st.sidebar.caption(f"Latest on BTS: {latest}")
+            except Exception as e:
+                st.sidebar.caption(f"Pipeline state error: {str(e)[:50]}")
+        else:
+            st.sidebar.caption("No pipeline state found.")
 
-    if st.sidebar.button("▶ Run Pipeline Update", use_container_width=True):
-        with st.sidebar:
-            with st.spinner("Running pipeline update..."):
-                try:
-                    import subprocess
-                    result = subprocess.run(
-                        [sys.executable, "run_pipeline.py"],
-                        capture_output=True, text=True, timeout=600,
-                        cwd=r"C:\Users\abish\OneDrive\New\OneDrive\Desktop\Airlines"
-                    )
-                    if result.returncode == 0:
-                        st.success("Pipeline update complete!")
-                        st.cache_data.clear()
-                    else:
-                        st.error(f"Pipeline error: {result.stderr[:200]}")
-                except Exception as e:
-                    st.error(f"Failed: {e}")
+        if st.sidebar.button("▶ Run Pipeline Update", use_container_width=True):
+            with st.sidebar:
+                with st.spinner("Running pipeline update..."):
+                    try:
+                        result = subprocess.run(
+                            [sys.executable, "run_pipeline.py"],
+                            capture_output=True, text=True, timeout=600,
+                            cwd=r"C:\Users\abish\OneDrive\New\OneDrive\Desktop\Airlines"
+                        )
+                        if result.returncode == 0:
+                            st.success("Pipeline update complete!")
+                            st.cache_data.clear()
+                        else:
+                            st.error(f"Pipeline error: {result.stderr[:200]}")
+                    except Exception as e:
+                        st.error(f"Failed: {e}")
+    else:
+        st.sidebar.caption("Pipeline updates run locally only.\n\nData syncs from Hugging Face automatically.")
 
     return filtered_months, year_range
 
