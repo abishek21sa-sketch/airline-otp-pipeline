@@ -84,9 +84,12 @@ HF_REPO_ID = "Babbi21SA/airline-otp-data"
 # Hardcoded months — this ALWAYS works, no HF API calls
 # For Cloud — just a few months
 AVAILABLE_MONTHS = [
-    (2025, 5), (2025, 6), (2025, 7), (2025, 8),
+    (2024, 1), (2024, 2), (2024, 3), (2024, 4), (2024, 5), (2024, 6),
+    (2024, 7), (2024, 8), (2024, 9), (2024, 10), (2024, 11), (2024, 12),
+    (2025, 1), (2025, 2), (2025, 3), (2025, 4), (2025, 5), (2025, 6),
+    (2025, 7), (2025, 8), (2025, 9), (2025, 10), (2025, 11), (2025, 12),
+    (2026, 1), (2026, 2), (2026, 3), (2026, 4), (2026, 5), 
 ]
-
 def detect_environment():
     """Detect if running locally or on Streamlit Cloud."""
     local_clean = r"C:\Users\abish\OneDrive\New\OneDrive\Desktop\Airlines\Data\Clean"
