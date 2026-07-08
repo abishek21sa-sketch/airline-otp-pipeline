@@ -1,7 +1,7 @@
 # app.py
 # US Airline On-Time Performance Dashboard
 # Streamlit app — runs locally against full dataset
-# or on Streamlit Cloud against 2024-2025 sample
+# or on Streamlit Cloud against selected months
 
 import streamlit as st
 import pandas as pd
@@ -76,13 +76,8 @@ MONTH_NAMES = {
     9:'September', 10:'October', 11:'November', 12:'December'
 }
 
-
-# ── DATA LOADING ──────────────────────────────────────────────────────────────
-
 HF_REPO_ID = "Babbi21SA/airline-otp-data"
 
-# Hardcoded months — this ALWAYS works, no HF API calls
-# For Cloud — just a few months
 AVAILABLE_MONTHS = [
     (2018, 1), (2018, 2), (2018, 3), (2018, 4), (2018, 5), (2018, 6),
     (2018, 7), (2018, 8), (2018, 9), (2018, 10), (2018, 11), (2018, 12),
@@ -102,12 +97,15 @@ AVAILABLE_MONTHS = [
     (2025, 7), (2025, 8), (2025, 9), (2025, 10), (2025, 11), (2025, 12),
     (2026, 1), (2026, 2), (2026, 3), (2026, 4), (2026, 5),
 ]
+
+
+# ── DATA LOADING ──────────────────────────────────────────────────────────────
+
 def detect_environment():
     """Detect if running locally or on Streamlit Cloud."""
     local_clean = r"C:\Users\abish\OneDrive\New\OneDrive\Desktop\Airlines\Data\Clean"
     if os.path.exists(local_clean):
         return "local", local_clean
-    # Streamlit Cloud — use Hugging Face
     return "cloud", None
 
 
@@ -127,7 +125,6 @@ def load_months_hf(selected_months):
         url = f"https://huggingface.co/datasets/{HF_REPO_ID}/resolve/main/Data/Clean/{filename}"
         
         try:
-            # Use shorter timeout for each file
             response = requests.get(url, timeout=30)
             if response.status_code == 200:
                 df = pd.read_csv(io.StringIO(response.text), low_memory=False)
@@ -161,7 +158,7 @@ def load_months_hf(selected_months):
     return combined
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=86400)
 def get_available_months(clean_dir):
     """List all available year/month combinations."""
     months = []
@@ -172,7 +169,7 @@ def get_available_months(clean_dir):
     return sorted(months)
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=86400)
 def load_months(clean_dir, selected_months):
     """Load specific months from clean files."""
     frames = []
@@ -232,88 +229,6 @@ def metric_card(label, value, delta=None, good_direction="high"):
         {delta_html}
     </div>
     """
-
-
-# ── SIDEBAR ───────────────────────────────────────────────────────────────────
-
-def build_sidebar(env, clean_dir, available_months):
-    st.sidebar.title("✈ Filters")
-    st.sidebar.markdown("---")
-
-    # Year range
-    available_years = sorted(set(y for y, m in available_months))
-    year_range = st.sidebar.select_slider(
-        "Year Range",
-        options=available_years,
-        value=(max(available_years) - 1, max(available_years))
-        if len(available_years) >= 2 else (available_years[0], available_years[-1])
-    )
-
-    # Filter months to selected year range
-    filtered_months = [
-        (y, m) for y, m in available_months
-        if year_range[0] <= y <= year_range[1]
-    ]
-
-    # Month filter (optional)
-    all_months = sorted(set(m for y, m in filtered_months))
-    month_labels = [MONTH_NAMES[m] for m in all_months]
-    selected_month_labels = st.sidebar.multiselect(
-        "Months (leave empty for all)",
-        options=month_labels,
-        default=[]
-    )
-    if selected_month_labels:
-        selected_month_nums = [
-            k for k, v in MONTH_NAMES.items() if v in selected_month_labels
-        ]
-        filtered_months = [
-            (y, m) for y, m in filtered_months if m in selected_month_nums
-        ]
-
-    st.sidebar.markdown("---")
-    st.sidebar.caption(f"Loading {len(filtered_months)} months of data")
-
-    # Pipeline update section (local only)
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("🔄 Pipeline")
-    
-    if env == "local":
-        # Only show pipeline controls on local environment
-        local_state_file = r"C:\Users\abish\OneDrive\New\OneDrive\Desktop\Airlines\Data\pipeline_state.json"
-        if os.path.exists(local_state_file):
-            try:
-                with open(local_state_file) as f:
-                    state = json.load(f)
-                last_checked = state.get("last_checked", "Never")[:19] if state.get("last_checked") else "Never"
-                latest = state.get("last_known_latest", "Unknown")
-                st.sidebar.caption(f"Last checked: {last_checked}")
-                st.sidebar.caption(f"Latest on BTS: {latest}")
-            except Exception as e:
-                st.sidebar.caption(f"Pipeline state error: {str(e)[:50]}")
-        else:
-            st.sidebar.caption("No pipeline state found.")
-
-        if st.sidebar.button("▶ Run Pipeline Update", use_container_width=True):
-            with st.sidebar:
-                with st.spinner("Running pipeline update..."):
-                    try:
-                        result = subprocess.run(
-                            [sys.executable, "run_pipeline.py"],
-                            capture_output=True, text=True, timeout=600,
-                            cwd=r"C:\Users\abish\OneDrive\New\OneDrive\Desktop\Airlines"
-                        )
-                        if result.returncode == 0:
-                            st.success("Pipeline update complete!")
-                            st.cache_data.clear()
-                        else:
-                            st.error(f"Pipeline error: {result.stderr[:200]}")
-                    except Exception as e:
-                        st.error(f"Failed: {e}")
-    else:
-        st.sidebar.caption("Pipeline updates run locally only.\n\nData syncs from Hugging Face automatically.")
-
-    return filtered_months, year_range
 
 
 # ── PAGE 1: OVERVIEW ─────────────────────────────────────────────────────────
@@ -694,7 +609,6 @@ def page_aircraft_tracker(df):
         ax.axhline(0,  color=WHITE,    linewidth=0.8, linestyle='--', alpha=0.4)
         ax.axhline(15, color=COLOR_CRIT, linewidth=0.8, linestyle=':', alpha=0.5)
         dates = [str(d)[-5:] for d in daily['FlightDate'].dt.date]
-        # Show only monthly tick marks to avoid crowding
         tick_indices = []
         tick_labels  = []
         seen_months  = set()
@@ -749,15 +663,12 @@ def page_aircraft_tracker(df):
         elif len(causes) == 1:
             label, val = list(causes.items())[0]
             st.info(f"All recorded delay minutes attributed to: **{label}** "
-                    f"({val:,.0f} mins). More cause detail available after "
-                    f"re-processing with full 20-field schema.")
+                    f"({val:,.0f} mins).")
         else:
-            st.info("No delay cause columns found. "
-                    "Re-run pipeline_02_process.py with the updated 20-field schema.")
+            st.info("No delay cause columns found.")
 
     # Rotation table
     st.subheader("Full Rotation")
-    # Fix rotation table
     show_cols = ['FlightDate', 'FlightNumber', 'Origin', 'Dest',
                  'SchedDep', 'ActualDep', 'DepDelay',
                  'SchedArr', 'ActualArr', 'ArrDelay',
@@ -854,7 +765,7 @@ def page_delay_analysis(df):
         )
         operated2 = operated2.dropna(subset=['dep_hour'])
         operated2['dep_hour'] = operated2['dep_hour'].astype(int)
-        operated2 = operated2[operated2['dep_hour'] < 24]  # exclude 24xx artifacts
+        operated2 = operated2[operated2['dep_hour'] < 24]
 
         hourly = operated2.groupby('dep_hour').agg(
             legs         = ('ArrDelay', 'count'),
@@ -926,7 +837,6 @@ def page_delay_analysis(df):
         fig4, axes4 = plt.subplots(2, 1, figsize=(6, 5))
         style_fig(fig4)
 
-        # Top: on-time rate by leg
         ax4a = axes4[0]
         style_ax(ax4a)
         colors4 = [COLOR_GOOD if v >= 80 else COLOR_WARN if v >= 70
@@ -940,7 +850,6 @@ def page_delay_analysis(df):
         ax4a.set_ylabel('On-time %', color=TEXT_COLOR, fontsize=8)
         ax4a.set_ylim(50, 100)
 
-        # Bottom: avg delay by leg
         ax4b = axes4[1]
         style_ax(ax4b)
         colors4b = [COLOR_GOOD if d <= 0 else COLOR_WARN if d <= 10
@@ -1074,7 +983,6 @@ def page_network_map(df):
         Max_Delay    = ('ArrDelay', lambda x: f"{x.max():.0f}m"),
     ).sort_values('Flights', ascending=False).reset_index()
 
-    # Add cancel rate from full df
     df2 = df.copy()
     df2['Route'] = df2['Origin'] + ' → ' + df2['Dest']
     cancel_rates = df2.groupby('Route')['Cancelled'].mean() * 100
@@ -1096,6 +1004,7 @@ def page_network_map(df):
 
 
 # ── MAIN ──────────────────────────────────────────────────────────────────────
+
 def main():
     st.title("✈ US Airline On-Time Performance Dashboard")
     st.caption("Source: BTS Marketing Carrier On-Time Performance | 2018–2026")
@@ -1103,61 +1012,51 @@ def main():
     env, clean_dir = detect_environment()
 
     if env == "cloud":
+        # ── CLOUD MODE ────────────────────────────────────────────────────────
         available_months = AVAILABLE_MONTHS
-    
-        # Initialize session state
-        if "selected_months" not in st.session_state:
-            st.session_state.selected_months = []
-    
+        
         st.sidebar.title("✈ Filters")
         st.sidebar.markdown("---")
-    
-        # Create labels with YEAR + MONTH (e.g., "May 2025", "June 2025")
+        
         month_options = [f"{MONTH_NAMES[m]} {y}" for y, m in sorted(available_months, reverse=True)]
-    
+        
         selected_labels = st.sidebar.multiselect(
             "Select Months to Load",
             options=month_options,
             default=[]
         )
-    
-        # Convert back to (year, month) tuples
+        
         if selected_labels:
             st.session_state.selected_months = []
             for label in selected_labels:
-                parts = label.split()  # e.g., ["May", "2025"]
+                parts = label.split()
                 month_name = parts[0]
                 year = int(parts[1])
                 month_num = [k for k, v in MONTH_NAMES.items() if v == month_name][0]
                 st.session_state.selected_months.append((year, month_num))
-    
-        st.sidebar.caption(f"Selected: {len(st.session_state.selected_months)} months")
+        
+        st.sidebar.caption(f"Selected: {len(st.session_state.get('selected_months', []))} months")
         st.sidebar.markdown("---")
-    
-        # Load button
+        
         if st.sidebar.button("Load Data", use_container_width=True):
-            if st.session_state.selected_months:
+            if st.session_state.get('selected_months'):
                 with st.spinner(f"Loading {len(st.session_state.selected_months)} months..."):
                     df = load_months_hf(tuple(st.session_state.selected_months))
                     if not df.empty:
                         st.session_state.df = df
-                        st.session_state.df = df
                         st.session_state.load_counter = st.session_state.get("load_counter", 0) + 1
-                        st.session_state.date_filter_reset = True
                         st.rerun()
-                    else:
-                        st.error("Failed to load data. Check your month selections.")
             else:
                 st.error("Select at least one month first")
-    
-        # Show dashboard if data loaded
+        
         if hasattr(st.session_state, 'df') and not st.session_state.df.empty:
             df = st.session_state.df
         else:
             st.info("👆 Pick months above, click Load Data")
-            return
+            st.stop()
+
     else:
-        # Local mode — auto-load default months
+        # ── LOCAL MODE ────────────────────────────────────────────────────────
         if clean_dir is None:
             st.error("Data directory not found.")
             st.stop()
@@ -1178,7 +1077,6 @@ def main():
             (2026, 1), (2026, 2), (2026, 3), (2026, 4), (2026, 5), (2026, 6),
         ]
         
-        # Month selector with default
         month_options = [f"{MONTH_NAMES[m]} {y}" for y, m in sorted(available_months, reverse=True)]
         default_labels = [f"{MONTH_NAMES[m]} {y}" for y, m in sorted(default_months)]
         
@@ -1188,7 +1086,6 @@ def main():
             default=default_labels
         )
         
-        # Convert labels to tuples
         selected_months_local = []
         for label in selected_labels:
             parts = label.split()
@@ -1200,23 +1097,61 @@ def main():
         st.sidebar.caption(f"Loading: {len(selected_months_local)} months")
         st.sidebar.markdown("---")
         
-        # Load automatically
+        # ── PIPELINE SECTION ──────────────────────────────────────────────────
+        st.sidebar.subheader("🔄 Pipeline")
+        
+        local_state_file = r"C:\Users\abish\OneDrive\New\OneDrive\Desktop\Airlines\Data\pipeline_state.json"
+        if os.path.exists(local_state_file):
+            try:
+                with open(local_state_file) as f:
+                    state = json.load(f)
+                last_checked = state.get("last_checked", "Never")[:19] if state.get("last_checked") else "Never"
+                latest = state.get("last_known_latest", "Unknown")
+                st.sidebar.caption(f"Last checked: {last_checked}")
+                st.sidebar.caption(f"Latest on BTS: {latest}")
+            except Exception as e:
+                st.sidebar.caption(f"Pipeline state error: {str(e)[:50]}")
+        else:
+            st.sidebar.caption("No pipeline state found.")
+
+        if st.sidebar.button("▶ Run Pipeline Update", use_container_width=True):
+            with st.sidebar:
+                with st.spinner("Running pipeline update..."):
+                    try:
+                        result = subprocess.run(
+                            [sys.executable, "run_pipeline.py"],
+                            capture_output=True, text=True, timeout=600,
+                            cwd=r"C:\Users\abish\OneDrive\New\OneDrive\Desktop\Airlines"
+                        )
+                        if result.returncode == 0:
+                            st.success("Pipeline update complete!")
+                            st.cache_data.clear()
+                        else:
+                            st.error(f"Pipeline error: {result.stderr[:200]}")
+                    except Exception as e:
+                        st.error(f"Failed: {e}")
+        
+        st.sidebar.markdown("---")
+        
+        # Load data automatically
         with st.spinner(f"Loading {len(selected_months_local)} months..."):
             df = load_months(clean_dir, tuple(selected_months_local))
             if not df.empty:
                 st.session_state.df = df
                 st.session_state.load_counter = st.session_state.get("load_counter", 0) + 1
+
+    if df.empty:
+        st.warning("No data found for selected filters.")
+        st.stop()
+
+    st.sidebar.success(f"Loaded {len(df):,} flights")
     
     # Global date filter
     st.sidebar.markdown("---")
     st.sidebar.subheader("📅 Date Range Filter")
     min_date = df['FlightDate'].min().date()
     max_date = df['FlightDate'].max().date()
-    if "date_filter_reset" not in st.session_state:
-        st.session_state.date_filter_reset = False
     
-    default_dates = (min_date, max_date) if st.session_state.date_filter_reset else (min_date, max_date)
-    st.session_state.date_filter_reset = False
     date_range = st.sidebar.date_input(
         "Filter by date",
         value=(min_date, max_date),
@@ -1229,11 +1164,13 @@ def main():
                 (df['FlightDate'].dt.date <= date_range[1])]
 
     # Navigation
-    # Navigation (shows for both local and cloud)
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Navigation")
     page = st.sidebar.radio(
-        "Navigation",
+        "Select Page",
         ["Overview", "Route Explorer", "Carrier Comparison",
-         "Aircraft Tracker", "Delay Analysis", "Network Map"]
+         "Aircraft Tracker", "Delay Analysis", "Network Map"],
+        label_visibility="collapsed"
     )
 
     if page == "Overview":
@@ -1251,7 +1188,8 @@ def main():
 
     st.sidebar.markdown("---")
     st.sidebar.caption(
-        "Built by Abi"
+        "Built by Abishek Singanur Aswan Kumar\n"
+        "M.S. Industrial Engineering, UIUC"
     )
 
 
