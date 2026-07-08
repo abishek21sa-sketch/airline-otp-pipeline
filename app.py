@@ -81,6 +81,13 @@ MONTH_NAMES = {
 
 HF_REPO_ID = "Babbi21SA/airline-otp-data"
 
+# Fallback month list (hardcoded as backup if HF fails)
+FALLBACK_MONTHS = [
+    (2025, 1), (2025, 2), (2025, 3), (2025, 4), (2025, 5), (2025, 6),
+    (2025, 7), (2025, 8), (2024, 9), (2024, 10), (2024, 11), (2024, 12),
+    (2024, 1), (2024, 2), (2024, 3), (2024, 4), (2024, 5),
+]
+
 def detect_environment():
     """Detect if running locally or on Streamlit Cloud."""
     local_clean = r"C:\Users\abish\OneDrive\New\OneDrive\Desktop\Airlines\Data\Clean"
@@ -90,62 +97,75 @@ def detect_environment():
     return "cloud", None
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=3600)
 def get_available_months_hf():
     """List available months from Hugging Face dataset."""
     try:
         from huggingface_hub import list_repo_files
-        files = list(list_repo_files(HF_REPO_ID, repo_type="dataset"))
+        print("[INFO] Connecting to Hugging Face...")
+        # Set a short timeout to avoid hanging
+        files = list(list_repo_files(HF_REPO_ID, repo_type="dataset", timeout=10))
         months = []
         for f in files:
             m = re.match(r"Data/Clean/OTP_(\d{4})_(\d{2})_", f)
             if m:
                 months.append((int(m.group(1)), int(m.group(2))))
         if not months:
-            raise ValueError(f"No OTP data files found in {HF_REPO_ID}")
+            print(f"[WARN] No OTP data files found, using fallback")
+            return sorted(FALLBACK_MONTHS)
+        print(f"[INFO] Found {len(months)} months on HF")
         return sorted(months)
     except Exception as e:
-        print(f"[ERROR] HuggingFace API failed: {type(e).__name__}: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return []
+        print(f"[WARN] HuggingFace failed ({type(e).__name__}), using fallback months")
+        return sorted(FALLBACK_MONTHS)
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=3600)
 def load_months_hf(selected_months):
-    """Load specific months from Hugging Face."""
+    """Load specific months from Hugging Face with retry logic."""
     import io
     import requests
     frames = []
     failed = []
-    for year, month in selected_months:
+    
+    print(f"[INFO] Loading {len(selected_months)} months from HF...")
+    
+    for i, (year, month) in enumerate(selected_months):
         month_name = MONTH_NAMES[month]
         filename = f"OTP_{year}_{month:02d}_{month_name}.csv"
         url = f"https://huggingface.co/datasets/{HF_REPO_ID}/resolve/main/Data/Clean/{filename}"
+        
         try:
-            response = requests.get(url, timeout=60)
+            # Use shorter timeout for each file
+            response = requests.get(url, timeout=30)
             if response.status_code == 200:
                 df = pd.read_csv(io.StringIO(response.text), low_memory=False)
                 df['Year']  = year
                 df['Month'] = month
                 frames.append(df)
+                print(f"  [{i+1}/{len(selected_months)}] ✓ {filename}")
             else:
                 failed.append(f"{filename} (HTTP {response.status_code})")
+                print(f"  [{i+1}/{len(selected_months)}] ✗ {filename} (HTTP {response.status_code})")
+        except requests.Timeout:
+            failed.append(f"{filename} (timeout)")
+            print(f"  [{i+1}/{len(selected_months)}] ✗ {filename} (timeout after 30s)")
         except Exception as e:
             failed.append(f"{filename} ({type(e).__name__})")
-            print(f"[LOAD ERROR] {filename}: {e}")
+            print(f"  [{i+1}/{len(selected_months)}] ✗ {filename}: {type(e).__name__}")
 
     if not frames:
-        if failed:
-            print(f"[ERROR] Failed to load any files. Failures: {failed}")
+        print(f"[ERROR] Failed to load ANY files. All {len(failed)} failed.")
         return pd.DataFrame()
+    
+    print(f"[INFO] Successfully loaded {len(frames)}/{len(selected_months)} months")
     
     combined = pd.concat(frames, ignore_index=True)
     combined['FlightDate'] = pd.to_datetime(combined['FlightDate'], errors='coerce')
     combined['Carrier'] = combined['Carrier'].astype(str).str.strip()
     
     if failed:
-        print(f"[WARNING] Loaded {len(frames)} months, but failed to load {len(failed)} files")
+        print(f"[WARN] {len(failed)} files failed to load (will continue with {len(frames)} months)")
     
     return combined
 
@@ -1094,22 +1114,22 @@ def main():
 
     if env == "cloud":
         # Running on Streamlit Cloud — read from Hugging Face
-        try:
-            available_months = get_available_months_hf()
-            if not available_months:
-                st.error("❌ Could not load data from Hugging Face. Check that:\n"
-                        "1. Hugging Face is accessible\n"
-                        "2. Repository 'Babbi21SA/airline-otp-data' exists and is public\n"
-                        "3. CSV files are in Data/Clean/ folder\n\n"
-                        "Try refreshing in a few moments.")
-                st.stop()
+        print("[INFO] Detected Cloud environment")
+        available_months = get_available_months_hf()
+        
+        if not available_months:
+            available_months = sorted(FALLBACK_MONTHS)
+            st.sidebar.caption(f"⚠️ Cloud mode | Using fallback months ({len(available_months)})")
+        else:
             st.sidebar.caption(f"Cloud mode | HF dataset | {len(available_months)} months")
-            filtered_months, year_range = build_sidebar(env, None, available_months)
+        
+        filtered_months, year_range = build_sidebar(env, None, available_months)
+        
+        if filtered_months:
             with st.spinner(f"Loading {len(filtered_months)} months from Hugging Face..."):
                 df = load_months_hf(tuple(filtered_months))
-        except Exception as e:
-            st.error(f"❌ Unexpected error loading from Hugging Face:\n\n`{e}`")
-            st.stop()
+        else:
+            df = pd.DataFrame()
     else:
         # Running locally — read from local Clean folder
         if clean_dir is None:
