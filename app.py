@@ -101,9 +101,13 @@ def get_available_months_hf():
             m = re.match(r"Data/Clean/OTP_(\d{4})_(\d{2})_", f)
             if m:
                 months.append((int(m.group(1)), int(m.group(2))))
+        if not months:
+            raise ValueError(f"No OTP data files found in {HF_REPO_ID}")
         return sorted(months)
     except Exception as e:
-        st.error(f"Could not connect to Hugging Face: {e}")
+        print(f"[ERROR] HuggingFace API failed: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return []
 
 
@@ -113,6 +117,7 @@ def load_months_hf(selected_months):
     import io
     import requests
     frames = []
+    failed = []
     for year, month in selected_months:
         month_name = MONTH_NAMES[month]
         filename = f"OTP_{year}_{month:02d}_{month_name}.csv"
@@ -124,14 +129,24 @@ def load_months_hf(selected_months):
                 df['Year']  = year
                 df['Month'] = month
                 frames.append(df)
+            else:
+                failed.append(f"{filename} (HTTP {response.status_code})")
         except Exception as e:
-            st.warning(f"Could not load {filename}: {e}")
+            failed.append(f"{filename} ({type(e).__name__})")
+            print(f"[LOAD ERROR] {filename}: {e}")
 
     if not frames:
+        if failed:
+            print(f"[ERROR] Failed to load any files. Failures: {failed}")
         return pd.DataFrame()
+    
     combined = pd.concat(frames, ignore_index=True)
     combined['FlightDate'] = pd.to_datetime(combined['FlightDate'], errors='coerce')
     combined['Carrier'] = combined['Carrier'].astype(str).str.strip()
+    
+    if failed:
+        print(f"[WARNING] Loaded {len(frames)} months, but failed to load {len(failed)} files")
+    
     return combined
 
 
@@ -1079,14 +1094,22 @@ def main():
 
     if env == "cloud":
         # Running on Streamlit Cloud — read from Hugging Face
-        available_months = get_available_months_hf()
-        if not available_months:
-            st.error("Could not load data from Hugging Face. Please try again.")
+        try:
+            available_months = get_available_months_hf()
+            if not available_months:
+                st.error("❌ Could not load data from Hugging Face. Check that:\n"
+                        "1. Hugging Face is accessible\n"
+                        "2. Repository 'Babbi21SA/airline-otp-data' exists and is public\n"
+                        "3. CSV files are in Data/Clean/ folder\n\n"
+                        "Try refreshing in a few moments.")
+                st.stop()
+            st.sidebar.caption(f"Cloud mode | HF dataset | {len(available_months)} months")
+            filtered_months, year_range = build_sidebar(env, None, available_months)
+            with st.spinner(f"Loading {len(filtered_months)} months from Hugging Face..."):
+                df = load_months_hf(tuple(filtered_months))
+        except Exception as e:
+            st.error(f"❌ Unexpected error loading from Hugging Face:\n\n`{e}`")
             st.stop()
-        st.sidebar.caption(f"Cloud mode | HF dataset | {len(available_months)} months")
-        filtered_months, year_range = build_sidebar(env, None, available_months)
-        with st.spinner(f"Loading {len(filtered_months)} months from Hugging Face..."):
-            df = load_months_hf(tuple(filtered_months))
     else:
         # Running locally — read from local Clean folder
         if clean_dir is None:
