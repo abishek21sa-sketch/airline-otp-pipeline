@@ -1082,64 +1082,55 @@ def page_network_map(df):
 
 # ── MAIN ──────────────────────────────────────────────────────────────────────
 
-def main():
-    print("\n" + "="*80)
-    print("[DEBUG] main() started")
-    print("="*80 + "\n")
-    
+
+if __name__ == '__main__':
+    main()def main():
     st.title("✈ US Airline On-Time Performance Dashboard")
     st.caption("Source: BTS Marketing Carrier On-Time Performance | 2018–2026")
-    print("[DEBUG] Page title rendered")
 
-    print("[DEBUG] Calling detect_environment()...")
-    print("[DEBUG] About to detect environment...")
     env, clean_dir = detect_environment()
-    print(f"[DEBUG] env={env}, clean_dir={clean_dir}")
 
     if env == "cloud":
-        print("[DEBUG] Cloud environment detected")
-        # Running on Streamlit Cloud — read from Hugging Face
-        # Using hardcoded month list (avoid HF API timeout issues)
-        available_months = AVAILABLE_MONTHS
-        st.sidebar.caption(f"Cloud mode | {len(available_months)} months available")
+        st.sidebar.title("✈ Filters")
+        st.info("📊 **Click below to load data from Hugging Face**")
         
-        print("[DEBUG] Calling build_sidebar()...")
-        filtered_months, year_range = build_sidebar(env, None, available_months)
-        print(f"[DEBUG] build_sidebar() returned: {len(filtered_months)} filtered months")
-        
-        if filtered_months:
-            print("[DEBUG] Starting data load...")
-            with st.spinner(f"Loading {len(filtered_months)} months from Hugging Face..."):
-                df = load_months_hf(tuple(filtered_months))
-        else:
-            print("[DEBUG] No months selected by default")
-            df = pd.DataFrame()
+        if st.sidebar.button("Load Data", use_container_width=True):
+            with st.spinner("Loading data..."):
+                available_months = AVAILABLE_MONTHS
+                filtered_months, year_range = build_sidebar(env, None, available_months)
+                
+                if filtered_months:
+                    df = load_months_hf(tuple(filtered_months))
+                    if not df.empty:
+                        st.success(f"Loaded {len(df):,} flights")
+                    else:
+                        st.error("Failed to load data")
+                else:
+                    st.warning("No months selected")
+        return
+    
+    # Local mode (unchanged)
+    if clean_dir is None:
+        st.error("Data directory not found.")
+        st.stop()
+    available_months = get_available_months(clean_dir)
+    if not available_months:
+        st.error("No clean data files found.")
+        st.stop()
+    years = sorted(set(y for y, m in available_months))
+    st.sidebar.caption(
+        f"Local mode | {len(available_months)} months | "
+        f"{years[0]}–{years[-1]}"
+    )
+    filtered_months, year_range = build_sidebar(env, clean_dir, available_months)
+    with st.spinner(f"Loading {len(filtered_months)} months..."):
+        df = load_months(clean_dir, tuple(filtered_months))
 
-    else:
-        # Running locally — read from local Clean folder
-        if clean_dir is None:
-            st.error("Data directory not found.")
-            st.stop()
-        available_months = get_available_months(clean_dir)
-        if not available_months:
-            st.error("No clean data files found.")
-            st.stop()
-        years = sorted(set(y for y, m in available_months))
-        st.sidebar.caption(
-            f"Local mode | {len(available_months)} months | "
-            f"{years[0]}–{years[-1]}"
-        )
-        filtered_months, year_range = build_sidebar(env, clean_dir, available_months)
-        with st.spinner(f"Loading {len(filtered_months)} months..."):
-            df = load_months(clean_dir, tuple(filtered_months))
-
-    print(f"[DEBUG] df.empty={df.empty}, len(df)={len(df)}")
     if df.empty:
         st.warning("No data found for selected filters.")
         st.stop()
 
     st.sidebar.success(f"Loaded {len(df):,} flights")
-    print("[DEBUG] Data loaded successfully, about to render navigation")
 
     # Navigation
     page = st.sidebar.radio(
