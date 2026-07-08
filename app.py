@@ -1157,7 +1157,7 @@ def main():
             st.info("👆 Pick months above, click Load Data")
             return
     else:
-        # Local mode (unchanged)
+        # Local mode — auto-load default months
         if clean_dir is None:
             st.error("Data directory not found.")
             st.stop()
@@ -1165,20 +1165,47 @@ def main():
         if not available_months:
             st.error("No clean data files found.")
             st.stop()
+        
         years = sorted(set(y for y, m in available_months))
         st.sidebar.caption(
-            f"Local mode | {len(available_months)} months | "
-            f"{years[0]}–{years[-1]}"
+            f"Local mode | {len(available_months)} months available | {years[0]}–{years[-1]}"
         )
-        filtered_months, year_range = build_sidebar(env, clean_dir, available_months)
-        with st.spinner(f"Loading {len(filtered_months)} months..."):
-            df = load_months(clean_dir, tuple(filtered_months))
-
-    if df.empty:
-        st.warning("No data found for selected filters.")
-        st.stop()
-
-    st.sidebar.success(f"Loaded {len(df):,} flights")
+        
+        # Default: Jan 2025 to Jun 2026 (17 months)
+        default_months = [
+            (2025, 1), (2025, 2), (2025, 3), (2025, 4), (2025, 5), (2025, 6),
+            (2025, 7), (2025, 8), (2025, 9), (2025, 10), (2025, 11), (2025, 12),
+            (2026, 1), (2026, 2), (2026, 3), (2026, 4), (2026, 5), (2026, 6),
+        ]
+        
+        # Month selector with default
+        month_options = [f"{MONTH_NAMES[m]} {y}" for y, m in sorted(available_months, reverse=True)]
+        default_labels = [f"{MONTH_NAMES[m]} {y}" for y, m in sorted(default_months)]
+        
+        selected_labels = st.sidebar.multiselect(
+            "Select Months (default: Jan 2025–Jun 2026)",
+            options=month_options,
+            default=default_labels
+        )
+        
+        # Convert labels to tuples
+        selected_months_local = []
+        for label in selected_labels:
+            parts = label.split()
+            month_name = parts[0]
+            year = int(parts[1])
+            month_num = [k for k, v in MONTH_NAMES.items() if v == month_name][0]
+            selected_months_local.append((year, month_num))
+        
+        st.sidebar.caption(f"Loading: {len(selected_months_local)} months")
+        st.sidebar.markdown("---")
+        
+        # Load automatically
+        with st.spinner(f"Loading {len(selected_months_local)} months..."):
+            df = load_months(clean_dir, tuple(selected_months_local))
+            if not df.empty:
+                st.session_state.df = df
+                st.session_state.load_counter = st.session_state.get("load_counter", 0) + 1
     
     # Global date filter
     st.sidebar.markdown("---")
