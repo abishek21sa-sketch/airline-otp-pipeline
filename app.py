@@ -1093,39 +1093,34 @@ def main():
     if env == "cloud":
         available_months = AVAILABLE_MONTHS
     
-    # Initialize session state
+        # Initialize session state
         if "selected_months" not in st.session_state:
             st.session_state.selected_months = []
     
-    # Show filters in sidebar
         st.sidebar.title("✈ Filters")
         st.sidebar.markdown("---")
     
-        available_years = sorted(set(y for y, m in available_months))
-        year_range = st.sidebar.select_slider(
-            "Year Range",
-            options=available_years,
-            value=(available_years[-1] - 1, available_years[-1]) if len(available_years) >= 2 else (available_years[0], available_years[-1])
-        )
+        # Create labels with YEAR + MONTH (e.g., "May 2025", "June 2025")
+        month_options = [f"{MONTH_NAMES[m]} {y}" for y, m in sorted(available_months, reverse=True)]
     
-        filtered_months = [(y, m) for y, m in available_months if year_range[0] <= y <= year_range[1]]
-        all_months = sorted(set(m for y, m in filtered_months))
-        month_labels = [MONTH_NAMES[m] for m in all_months]
-    
-        selected_month_labels = st.sidebar.multiselect(
-            "Months",
-            options=month_labels,
+        selected_labels = st.sidebar.multiselect(
+            "Select Months to Load",
+            options=month_options,
             default=[]
         )
     
-        if selected_month_labels:
-            selected_month_nums = [k for k, v in MONTH_NAMES.items() if v in selected_month_labels]
-            st.session_state.selected_months = [(y, m) for y, m in filtered_months if m in selected_month_nums]
-        else:
+        # Convert back to (year, month) tuples
+        if selected_labels:
             st.session_state.selected_months = []
+            for label in selected_labels:
+                parts = label.split()  # e.g., ["May", "2025"]
+                month_name = parts[0]
+                year = int(parts[1])
+                month_num = [k for k, v in MONTH_NAMES.items() if v == month_name][0]
+                st.session_state.selected_months.append((year, month_num))
     
-        st.sidebar.markdown("---")
         st.sidebar.caption(f"Selected: {len(st.session_state.selected_months)} months")
+        st.sidebar.markdown("---")
     
         # Load button
         if st.sidebar.button("Load Data", use_container_width=True):
@@ -1135,14 +1130,16 @@ def main():
                     if not df.empty:
                         st.session_state.df = df
                         st.rerun()
+                    else:
+                        st.error("Failed to load data. Check your month selections.")
             else:
-                st.error("Select at least one month")
+                st.error("Select at least one month first")
     
-    # Show dashboard if data loaded
+        # Show dashboard if data loaded
         if hasattr(st.session_state, 'df') and not st.session_state.df.empty:
             df = st.session_state.df
         else:
-            st.info("👆 Select months and click Load Data")
+            st.info("👆 Pick months above, click Load Data")
             return
     else:
         # Local mode (unchanged)
