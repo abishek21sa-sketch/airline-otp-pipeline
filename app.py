@@ -1081,10 +1081,7 @@ def page_network_map(df):
 
 
 # ── MAIN ──────────────────────────────────────────────────────────────────────
-
-
-if __name__ == '__main__':
-    main()def main():
+def main():
     st.title("✈ US Airline On-Time Performance Dashboard")
     st.caption("Source: BTS Marketing Carrier On-Time Performance | 2018–2026")
 
