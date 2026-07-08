@@ -1091,24 +1091,29 @@ def main():
     env, clean_dir = detect_environment()
 
     if env == "cloud":
-        st.sidebar.title("✈ Filters")
-        
+        available_months = AVAILABLE_MONTHS
+    
+        # Show filters FIRST (before button)
+        filtered_months, year_range = build_sidebar(env, None, available_months)
+    
+        st.sidebar.markdown("---")
+    
+        # Load Data button
         if st.sidebar.button("Load Data from Hugging Face", use_container_width=True):
-            with st.spinner("Loading 4 months..."):
-                available_months = AVAILABLE_MONTHS
-                filtered_months, year_range = build_sidebar(env, None, available_months)
-                
+            with st.spinner(f"Loading {len(filtered_months)} months..."):
                 if filtered_months:
                     df = load_months_hf(tuple(filtered_months))
                     if not df.empty:
                         st.session_state.df = df
                         st.rerun()
-        
+                else:
+                    st.error("Please select at least one month")
+    
         # If data already loaded, show dashboard
         if hasattr(st.session_state, 'df') and not st.session_state.df.empty:
             df = st.session_state.df
         else:
-            st.info("📊 Click the button above to load data")
+            st.info("👆 Select months above, then click Load Data")
             return
     else:
         # Local mode (unchanged)
@@ -1156,8 +1161,7 @@ def main():
 
     st.sidebar.markdown("---")
     st.sidebar.caption(
-        "Built by Abishek Singanur Aswan Kumar\n"
-        "M.S. Industrial Engineering, UIUC"
+        "Built by Abi"
     )
 
 
