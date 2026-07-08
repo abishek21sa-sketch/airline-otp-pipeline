@@ -81,11 +81,12 @@ MONTH_NAMES = {
 
 HF_REPO_ID = "Babbi21SA/airline-otp-data"
 
-# Fallback month list (hardcoded as backup if HF fails)
-FALLBACK_MONTHS = [
+# Hardcoded months — this ALWAYS works, no HF API calls
+AVAILABLE_MONTHS = [
+    (2024, 1), (2024, 2), (2024, 3), (2024, 4), (2024, 5), (2024, 6),
+    (2024, 7), (2024, 8), (2024, 9), (2024, 10), (2024, 11), (2024, 12),
     (2025, 1), (2025, 2), (2025, 3), (2025, 4), (2025, 5), (2025, 6),
-    (2025, 7), (2025, 8), (2024, 9), (2024, 10), (2024, 11), (2024, 12),
-    (2024, 1), (2024, 2), (2024, 3), (2024, 4), (2024, 5),
+    (2025, 7), (2025, 8),
 ]
 
 def detect_environment():
@@ -95,29 +96,6 @@ def detect_environment():
         return "local", local_clean
     # Streamlit Cloud — use Hugging Face
     return "cloud", None
-
-
-@st.cache_data(show_spinner=False, ttl=3600)
-def get_available_months_hf():
-    """List available months from Hugging Face dataset."""
-    try:
-        from huggingface_hub import list_repo_files
-        print("[INFO] Connecting to Hugging Face...")
-        # Set a short timeout to avoid hanging
-        files = list(list_repo_files(HF_REPO_ID, repo_type="dataset", timeout=10))
-        months = []
-        for f in files:
-            m = re.match(r"Data/Clean/OTP_(\d{4})_(\d{2})_", f)
-            if m:
-                months.append((int(m.group(1)), int(m.group(2))))
-        if not months:
-            print(f"[WARN] No OTP data files found, using fallback")
-            return sorted(FALLBACK_MONTHS)
-        print(f"[INFO] Found {len(months)} months on HF")
-        return sorted(months)
-    except Exception as e:
-        print(f"[WARN] HuggingFace failed ({type(e).__name__}), using fallback months")
-        return sorted(FALLBACK_MONTHS)
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
@@ -1107,28 +1085,37 @@ def page_network_map(df):
 # ── MAIN ──────────────────────────────────────────────────────────────────────
 
 def main():
+    print("\n" + "="*80)
+    print("[DEBUG] main() started")
+    print("="*80 + "\n")
+    
     st.title("✈ US Airline On-Time Performance Dashboard")
     st.caption("Source: BTS Marketing Carrier On-Time Performance | 2018–2026")
+    print("[DEBUG] Page title rendered")
 
+    print("[DEBUG] Calling detect_environment()...")
+    print("[DEBUG] About to detect environment...")
     env, clean_dir = detect_environment()
+    print(f"[DEBUG] env={env}, clean_dir={clean_dir}")
 
     if env == "cloud":
+        print("[DEBUG] Cloud environment detected")
         # Running on Streamlit Cloud — read from Hugging Face
-        print("[INFO] Detected Cloud environment")
-        available_months = get_available_months_hf()
+        # Using hardcoded month list (avoid HF API timeout issues)
+        available_months = AVAILABLE_MONTHS
+        st.sidebar.caption(f"Cloud mode | {len(available_months)} months available")
         
-        if not available_months:
-            available_months = sorted(FALLBACK_MONTHS)
-            st.sidebar.caption(f"⚠️ Cloud mode | Using fallback months ({len(available_months)})")
-        else:
-            st.sidebar.caption(f"Cloud mode | HF dataset | {len(available_months)} months")
-        
+        print("[DEBUG] Calling build_sidebar()...")
         filtered_months, year_range = build_sidebar(env, None, available_months)
+        print(f"[DEBUG] build_sidebar() returned: {len(filtered_months)} filtered months")
         
         if filtered_months:
+            print("[DEBUG] Starting data load...")
             with st.spinner(f"Loading {len(filtered_months)} months from Hugging Face..."):
                 df = load_months_hf(tuple(filtered_months))
+            print(f"[DEBUG] Data loaded: {len(df)} rows")
         else:
+            print("[DEBUG] No filtered months, creating empty DataFrame")
             df = pd.DataFrame()
     else:
         # Running locally — read from local Clean folder
@@ -1148,11 +1135,13 @@ def main():
         with st.spinner(f"Loading {len(filtered_months)} months..."):
             df = load_months(clean_dir, tuple(filtered_months))
 
+    print(f"[DEBUG] df.empty={df.empty}, len(df)={len(df)}")
     if df.empty:
         st.warning("No data found for selected filters.")
         st.stop()
 
     st.sidebar.success(f"Loaded {len(df):,} flights")
+    print("[DEBUG] Data loaded successfully, about to render navigation")
 
     # Navigation
     page = st.sidebar.radio(
