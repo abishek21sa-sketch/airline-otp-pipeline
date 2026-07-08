@@ -1141,6 +1141,7 @@ def main():
                     df = load_months_hf(tuple(st.session_state.selected_months))
                     if not df.empty:
                         st.session_state.df = df
+                        st.session_state.date_filter_reset = True
                         st.rerun()
                     else:
                         st.error("Failed to load data. Check your month selections.")
@@ -1182,6 +1183,11 @@ def main():
     st.sidebar.subheader("📅 Date Range Filter")
     min_date = df['FlightDate'].min().date()
     max_date = df['FlightDate'].max().date()
+    if "date_filter_reset" not in st.session_state:
+        st.session_state.date_filter_reset = False
+    
+    default_dates = (min_date, max_date) if st.session_state.date_filter_reset else (min_date, max_date)
+    st.session_state.date_filter_reset = False
     date_range = st.sidebar.date_input(
         "Filter by date",
         value=(min_date, max_date),
