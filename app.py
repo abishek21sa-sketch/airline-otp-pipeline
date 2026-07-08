@@ -1093,27 +1093,56 @@ def main():
     if env == "cloud":
         available_months = AVAILABLE_MONTHS
     
-        # Show filters FIRST (before button)
-        filtered_months, year_range = build_sidebar(env, None, available_months)
+    # Initialize session state
+        if "selected_months" not in st.session_state:
+            st.session_state.selected_months = []
     
+    # Show filters in sidebar
+        st.sidebar.title("✈ Filters")
         st.sidebar.markdown("---")
     
-        # Load Data button
-        if st.sidebar.button("Load Data from Hugging Face", use_container_width=True):
-            with st.spinner(f"Loading {len(filtered_months)} months..."):
-                if filtered_months:
-                    df = load_months_hf(tuple(filtered_months))
+        available_years = sorted(set(y for y, m in available_months))
+        year_range = st.sidebar.select_slider(
+            "Year Range",
+            options=available_years,
+            value=(available_years[-1] - 1, available_years[-1]) if len(available_years) >= 2 else (available_years[0], available_years[-1])
+        )
+    
+        filtered_months = [(y, m) for y, m in available_months if year_range[0] <= y <= year_range[1]]
+        all_months = sorted(set(m for y, m in filtered_months))
+        month_labels = [MONTH_NAMES[m] for m in all_months]
+    
+        selected_month_labels = st.sidebar.multiselect(
+            "Months",
+            options=month_labels,
+            default=[]
+        )
+    
+        if selected_month_labels:
+            selected_month_nums = [k for k, v in MONTH_NAMES.items() if v in selected_month_labels]
+            st.session_state.selected_months = [(y, m) for y, m in filtered_months if m in selected_month_nums]
+        else:
+            st.session_state.selected_months = []
+    
+        st.sidebar.markdown("---")
+        st.sidebar.caption(f"Selected: {len(st.session_state.selected_months)} months")
+    
+        # Load button
+        if st.sidebar.button("Load Data", use_container_width=True):
+            if st.session_state.selected_months:
+                with st.spinner(f"Loading {len(st.session_state.selected_months)} months..."):
+                    df = load_months_hf(tuple(st.session_state.selected_months))
                     if not df.empty:
                         st.session_state.df = df
                         st.rerun()
-                else:
-                    st.error("Please select at least one month")
+            else:
+                st.error("Select at least one month")
     
-        # If data already loaded, show dashboard
+    # Show dashboard if data loaded
         if hasattr(st.session_state, 'df') and not st.session_state.df.empty:
             df = st.session_state.df
         else:
-            st.info("👆 Select months above, then click Load Data")
+            st.info("👆 Select months and click Load Data")
             return
     else:
         # Local mode (unchanged)
