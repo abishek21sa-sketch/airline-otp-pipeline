@@ -1141,6 +1141,8 @@ def main():
                     df = load_months_hf(tuple(st.session_state.selected_months))
                     if not df.empty:
                         st.session_state.df = df
+                        st.session_state.df = df
+                        st.session_state.load_counter = st.session_state.get("load_counter", 0) + 1
                         st.session_state.date_filter_reset = True
                         st.rerun()
                     else:
@@ -1192,7 +1194,8 @@ def main():
         "Filter by date",
         value=(min_date, max_date),
         min_value=min_date,
-        max_value=max_date
+        max_value=max_date,
+        key=f"date_filter_{st.session_state.get('load_counter', 0)}"
     )
     if len(date_range) == 2:
         df = df[(df['FlightDate'].dt.date >= date_range[0]) & 
