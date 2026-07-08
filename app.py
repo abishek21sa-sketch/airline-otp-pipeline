@@ -1111,10 +1111,10 @@ def main():
             print("[DEBUG] Starting data load...")
             with st.spinner(f"Loading {len(filtered_months)} months from Hugging Face..."):
                 df = load_months_hf(tuple(filtered_months))
-            print(f"[DEBUG] Data loaded: {len(df)} rows")
         else:
-            print("[DEBUG] No filtered months, creating empty DataFrame")
+            print("[DEBUG] No months selected by default")
             df = pd.DataFrame()
+
     else:
         # Running locally — read from local Clean folder
         if clean_dir is None:
