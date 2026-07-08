@@ -1089,39 +1089,41 @@ def main():
 
     if env == "cloud":
         st.sidebar.title("✈ Filters")
-        st.info("📊 **Click below to load data from Hugging Face**")
         
-        if st.sidebar.button("Load Data", use_container_width=True):
-            with st.spinner("Loading data..."):
+        if st.sidebar.button("Load Data from Hugging Face", use_container_width=True):
+            with st.spinner("Loading 4 months..."):
                 available_months = AVAILABLE_MONTHS
                 filtered_months, year_range = build_sidebar(env, None, available_months)
                 
                 if filtered_months:
                     df = load_months_hf(tuple(filtered_months))
                     if not df.empty:
-                        st.success(f"Loaded {len(df):,} flights")
-                    else:
-                        st.error("Failed to load data")
-                else:
-                    st.warning("No months selected")
-        return
-    
-    # Local mode (unchanged)
-    if clean_dir is None:
-        st.error("Data directory not found.")
-        st.stop()
-    available_months = get_available_months(clean_dir)
-    if not available_months:
-        st.error("No clean data files found.")
-        st.stop()
-    years = sorted(set(y for y, m in available_months))
-    st.sidebar.caption(
-        f"Local mode | {len(available_months)} months | "
-        f"{years[0]}–{years[-1]}"
-    )
-    filtered_months, year_range = build_sidebar(env, clean_dir, available_months)
-    with st.spinner(f"Loading {len(filtered_months)} months..."):
-        df = load_months(clean_dir, tuple(filtered_months))
+                        st.session_state.df = df
+                        st.rerun()
+        
+        # If data already loaded, show dashboard
+        if hasattr(st.session_state, 'df') and not st.session_state.df.empty:
+            df = st.session_state.df
+        else:
+            st.info("📊 Click the button above to load data")
+            return
+    else:
+        # Local mode (unchanged)
+        if clean_dir is None:
+            st.error("Data directory not found.")
+            st.stop()
+        available_months = get_available_months(clean_dir)
+        if not available_months:
+            st.error("No clean data files found.")
+            st.stop()
+        years = sorted(set(y for y, m in available_months))
+        st.sidebar.caption(
+            f"Local mode | {len(available_months)} months | "
+            f"{years[0]}–{years[-1]}"
+        )
+        filtered_months, year_range = build_sidebar(env, clean_dir, available_months)
+        with st.spinner(f"Loading {len(filtered_months)} months..."):
+            df = load_months(clean_dir, tuple(filtered_months))
 
     if df.empty:
         st.warning("No data found for selected filters.")
@@ -1129,7 +1131,7 @@ def main():
 
     st.sidebar.success(f"Loaded {len(df):,} flights")
 
-    # Navigation
+    # Navigation (shows for both local and cloud)
     page = st.sidebar.radio(
         "Navigation",
         ["Overview", "Route Explorer", "Carrier Comparison",
