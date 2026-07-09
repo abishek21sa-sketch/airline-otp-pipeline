@@ -1002,6 +1002,159 @@ def page_network_map(df):
         use_container_width=True, hide_index=True
     )
 
+def page_hub_analysis(df):
+    st.header("🏢 Hub Analysis")
+    
+    # Top airports by total visits
+    visits = pd.concat([df['Origin'], df['Dest']]).value_counts().head(20)
+    
+    # Hub concentration (top 10 airports handle what % of traffic?)
+    total = len(df) * 2  # each flight counted twice (origin + dest)
+    concentration = (visits.head(10).sum() / total) * 100
+    
+    # Route density (how many routes per airport?)
+    routes_per_origin = df.groupby('Origin')['Dest'].nunique()
+    
+    # Visualize
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.barh(visits.index[::-1], visits.values[::-1])
+    st.pyplot(fig)
+    
+    # Metrics
+    st.metric("Hub Concentration (Top 10)", f"{concentration:.1f}%")
+    st.metric("Total Unique Routes", f"{df.groupby(['Origin', 'Dest']).ngroups:,}")
+
+def page_seasonal_trends(df):
+    st.header("🍂 Seasonal Trends")
+    
+    # Add season column
+    df['Month'] = df['FlightDate'].dt.month
+    df['Season'] = df['Month'].apply(lambda m: 
+        'Winter' if m in [12, 1, 2] else
+        'Spring' if m in [3, 4, 5] else
+        'Summer' if m in [6, 7, 8] else 'Fall'
+    )
+    
+    # Seasonal metrics
+    seasonal = df.groupby('Season').agg({
+        'ArrDelay': ['mean', lambda x: (x <= 15).mean() * 100],
+        'Cancelled': lambda x: x.mean() * 100,
+        'FlightDate': 'count'
+    })
+    
+    # Charts
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+    seasonal_data = df.groupby('Season')['ArrDelay'].mean()
+    ax1.bar(seasonal_data.index, seasonal_data.values)
+    ax1.set_title('Avg Delay by Season')
+    
+    # Table
+    st.dataframe(seasonal)
+
+def page_route_optimization(df):
+    st.header("🛫 Route Optimization")
+    
+    df['Route'] = df['Origin'] + ' → ' + df['Dest']
+    
+    # Route performance ranking
+    route_stats = df.groupby('Route').agg({
+        'FlightDate': 'count',
+        'ArrDelay': 'mean',
+        'Cancelled': lambda x: x.mean() * 100,
+        'Distance': 'first'
+    }).rename(columns={'FlightDate': 'Flights'})
+    
+    route_stats['OnTimeRate'] = (df.groupby('Route')['ArrDelay'].apply(
+        lambda x: (x <= 15).mean() * 100
+    ))
+    
+    # Sort by worst performing
+    worst = route_stats[route_stats['Flights'] > 100].sort_values('ArrDelay', ascending=False).head(20)
+    
+    st.subheader("Worst Performing Routes (>100 flights)")
+    st.dataframe(worst)
+    
+    # Distance vs delay scatter
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.scatter(route_stats['Distance'], route_stats['ArrDelay'], s=route_stats['Flights']/10)
+    ax.set_xlabel('Distance (miles)')
+    ax.set_ylabel('Avg Delay (min)')
+    st.pyplot(fig)
+
+def page_aircraft_utilization(df):
+    st.header("✈️ Aircraft Utilization")
+    
+    # Utilization metrics per tail number
+    utilization = df.groupby('TailNumber').agg({
+        'FlightDate': ['count', 'nunique'],
+        'ArrDelay': 'mean',
+        'Distance': 'sum'
+    }).round(2)
+    
+    utilization.columns = ['TotalFlights', 'UniqueDays', 'AvgDelay', 'TotalMiles']
+    utilization['FlightsPerDay'] = (
+        utilization['TotalFlights'] / utilization['UniqueDays']
+    ).round(2)
+    
+    # Identify underutilized
+    underutilized = utilization[utilization['FlightsPerDay'] < 2]
+    
+    st.metric("Total Aircraft", len(utilization))
+    st.metric("Avg Flights/Day", f"{utilization['FlightsPerDay'].mean():.1f}")
+    st.metric("Underutilized (<2 flights/day)", len(underutilized))
+    
+    # Top performers
+    st.subheader("Most Utilized Aircraft")
+    st.dataframe(utilization.nlargest(20, 'FlightsPerDay'))
+    
+    # Histogram
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.hist(utilization['FlightsPerDay'], bins=20, edgecolor='black')
+    ax.set_xlabel('Flights per Day')
+    ax.set_ylabel('Number of Aircraft')
+    st.pyplot(fig)
+
+def page_crew_efficiency(df):
+    st.header("👨‍✈️ Crew & Aircraft Efficiency")
+    
+    # Turnaround time: time between arrival at Dest and next departure from Dest
+    df_sorted = df.sort_values(['TailNumber', 'FlightDate', 'SchedArr'])
+    
+    df_sorted['NextDepartureTime'] = df_sorted.groupby('TailNumber')['SchedDep'].shift(-1)
+    df_sorted['TurnaroundMinutes'] = (
+        (df_sorted['NextDepartureTime'] - df_sorted['SchedArr']).dt.total_seconds() / 60
+    )
+    
+    # Recovery rate: DepDelay > 0 AND ArrDelay <= 15
+    recovered = df[(df['DepDelay'] > 0) & (df['ArrDelay'] <= 15)]
+    recovery_rate = (len(recovered) / len(df[df['DepDelay'] > 0])) * 100 if len(df[df['DepDelay'] > 0]) > 0 else 0
+    
+    # Metrics
+    st.metric("Avg Turnaround Time", f"{df_sorted['TurnaroundMinutes'].mean():.0f} min")
+    st.metric("Recovery Rate", f"{recovery_rate:.1f}%")
+    
+    # By carrier
+    st.subheader("Recovery Rate by Carrier")
+    carrier_recovery = df.groupby('Carrier').apply(
+        lambda x: (len(x[(x['DepDelay'] > 0) & (x['ArrDelay'] <= 15)]) / len(x[x['DepDelay'] > 0])) * 100 
+        if len(x[x['DepDelay'] > 0]) > 0 else 0
+    ).sort_values(ascending=False)
+    
+    fig, ax = plt.subplots(figsize=(10, 5))
+    carrier_recovery.head(10).plot(kind='barh', ax=ax)
+    ax.set_xlabel('Recovery Rate (%)')
+    st.pyplot(fig)
+    
+    # Turnaround distribution
+    st.subheader("Turnaround Time Distribution")
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.hist(df_sorted['TurnaroundMinutes'].dropna(), bins=30, edgecolor='black')
+    ax.set_xlabel('Minutes')
+    ax.set_ylabel('Frequency')
+    st.pyplot(fig)
+
+
+
 
 # ── MAIN ──────────────────────────────────────────────────────────────────────
 
@@ -1074,14 +1227,14 @@ def main():
         default_months = [
             (2025, 1), (2025, 2), (2025, 3), (2025, 4), (2025, 5), (2025, 6),
             (2025, 7), (2025, 8), (2025, 9), (2025, 10), (2025, 11), (2025, 12),
-            (2026, 1), (2026, 2), (2026, 3), (2026, 4), (2026, 5), (2026, 6),
+            (2026, 1), (2026, 2), (2026, 3), (2026, 4), (2026, 5),
         ]
         
         month_options = [f"{MONTH_NAMES[m]} {y}" for y, m in sorted(available_months, reverse=True)]
         default_labels = [f"{MONTH_NAMES[m]} {y}" for y, m in sorted(default_months)]
         
         selected_labels = st.sidebar.multiselect(
-            "Select Months (default: Jan 2025–Jun 2026)",
+            "Select Months (default: Jan 2025–May 2026)",
             options=month_options,
             default=default_labels
         )
@@ -1146,31 +1299,58 @@ def main():
 
     st.sidebar.success(f"Loaded {len(df):,} flights")
     
-    # Global date filter
+    # Global date filter - PERSISTENT with session_state
     st.sidebar.markdown("---")
     st.sidebar.subheader("📅 Date Range Filter")
     min_date = df['FlightDate'].min().date()
     max_date = df['FlightDate'].max().date()
     
-    date_range = st.sidebar.date_input(
-        "Filter by date",
-        value=(min_date, max_date),
-        min_value=min_date,
-        max_value=max_date,
-        key=f"date_filter_{st.session_state.get('load_counter', 0)}"
-    )
-    if len(date_range) == 2:
-        df = df[(df['FlightDate'].dt.date >= date_range[0]) & 
-                (df['FlightDate'].dt.date <= date_range[1])]
+    # Initialize session state for dates
+    if 'start_date' not in st.session_state:
+        st.session_state.start_date = min_date
+    if 'end_date' not in st.session_state:
+        st.session_state.end_date = max_date
+    
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        start_date = st.date_input(
+            "From",
+            value=st.session_state.start_date,
+            min_value=min_date,
+            max_value=max_date,
+            key="start_date_picker"
+        )
+        st.session_state.start_date = start_date
+    
+    with col2:
+        end_date = st.date_input(
+            "To",
+            value=st.session_state.end_date,
+            min_value=min_date,
+            max_value=max_date,
+            key="end_date_picker"
+        )
+        st.session_state.end_date = end_date
+    
+    # Validate and filter
+    if start_date > end_date:
+        st.sidebar.error("Start date must be before end date")
+        st.stop()
+    
+    df = df[(df['FlightDate'].dt.date >= start_date) & 
+            (df['FlightDate'].dt.date <= end_date)]
+    
+    st.sidebar.caption(f"Filtered: {start_date} to {end_date}")
 
     # Navigation
     st.sidebar.markdown("---")
     st.sidebar.subheader("Navigation")
     page = st.sidebar.radio(
-        "Select Page",
+        "Navigation",
         ["Overview", "Route Explorer", "Carrier Comparison",
-         "Aircraft Tracker", "Delay Analysis", "Network Map"],
-        label_visibility="collapsed"
+        "Aircraft Tracker", "Delay Analysis", "Network Map",
+        "Hub Analysis", "Seasonal Trends", "Route Optimization",
+        "Aircraft Utilization", "Crew Efficiency"]
     )
 
     if page == "Overview":
@@ -1185,6 +1365,17 @@ def main():
         page_delay_analysis(df)
     elif page == "Network Map":
         page_network_map(df)
+    elif page == "Hub Analysis":
+        page_hub_analysis(df)
+    elif page == "Seasonal Trends":
+        page_seasonal_trends(df)
+    elif page == "Route Optimization":
+        page_route_optimization(df)
+    elif page == "Aircraft Utilization":
+        page_aircraft_utilization(df)
+    elif page == "Crew Efficiency":
+        page_crew_efficiency(df)
+
 
     st.sidebar.markdown("---")
     st.sidebar.caption(
