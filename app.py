@@ -1117,12 +1117,30 @@ def page_aircraft_utilization(df):
 def page_crew_efficiency(df):
     st.header("👨‍✈️ Crew & Aircraft Efficiency")
     
-    # Turnaround time: time between arrival at Dest and next departure from Dest
-    df_sorted = df.sort_values(['TailNumber', 'FlightDate', 'SchedArr'])
+    # Turnaround time calculation (fix: convert times to datetime format first)
+    df_sorted = df.sort_values(['TailNumber', 'FlightDate', 'SchedArr']).copy()
     
+    # Convert integer times (0900) to timedelta for calculation
+    def time_to_minutes(time_int):
+        """Convert HHMM format to minutes since midnight"""
+        if pd.isna(time_int):
+            return None
+        hours = int(time_int) // 100
+        minutes = int(time_int) % 100
+        return hours * 60 + minutes
+    
+    # Get next departure and arrival times
     df_sorted['NextDepartureTime'] = df_sorted.groupby('TailNumber')['SchedDep'].shift(-1)
-    df_sorted['TurnaroundMinutes'] = (
-        (df_sorted['NextDepartureTime'] - df_sorted['SchedArr']).dt.total_seconds() / 60
+    df_sorted['ArrivalMinutes'] = df_sorted['SchedArr'].apply(time_to_minutes)
+    df_sorted['NextDepartureMinutes'] = df_sorted['NextDepartureTime'].apply(time_to_minutes)
+    
+    # Calculate turnaround (next departure - current arrival)
+    # Handle day boundary (if next flight is next day, add 1440 minutes)
+    df_sorted['TurnaroundMinutes'] = df_sorted.apply(
+        lambda row: row['NextDepartureMinutes'] - row['ArrivalMinutes']
+        if pd.notna(row['NextDepartureMinutes']) and pd.notna(row['ArrivalMinutes'])
+        else None,
+        axis=1
     )
     
     # Recovery rate: DepDelay > 0 AND ArrDelay <= 15
@@ -1130,7 +1148,9 @@ def page_crew_efficiency(df):
     recovery_rate = (len(recovered) / len(df[df['DepDelay'] > 0])) * 100 if len(df[df['DepDelay'] > 0]) > 0 else 0
     
     # Metrics
-    st.metric("Avg Turnaround Time", f"{df_sorted['TurnaroundMinutes'].mean():.0f} min")
+    valid_turnaround = df_sorted['TurnaroundMinutes'].dropna()
+    if len(valid_turnaround) > 0:
+        st.metric("Avg Turnaround Time", f"{valid_turnaround.mean():.0f} min")
     st.metric("Recovery Rate", f"{recovery_rate:.1f}%")
     
     # By carrier
@@ -1141,19 +1161,24 @@ def page_crew_efficiency(df):
     ).sort_values(ascending=False)
     
     fig, ax = plt.subplots(figsize=(10, 5))
-    carrier_recovery.head(10).plot(kind='barh', ax=ax)
+    style_fig(fig); style_ax(ax)
+    carrier_recovery.head(10).plot(kind='barh', ax=ax, color=COLOR_GOOD)
     ax.set_xlabel('Recovery Rate (%)')
+    ax.tick_params(colors=TEXT_COLOR)
     st.pyplot(fig)
+    plt.close()
     
     # Turnaround distribution
     st.subheader("Turnaround Time Distribution")
     fig, ax = plt.subplots(figsize=(10, 5))
-    ax.hist(df_sorted['TurnaroundMinutes'].dropna(), bins=30, edgecolor='black')
-    ax.set_xlabel('Minutes')
-    ax.set_ylabel('Frequency')
+    style_fig(fig); style_ax(ax)
+    valid_turnaround_filtered = valid_turnaround[(valid_turnaround > 0) & (valid_turnaround < 500)]
+    if len(valid_turnaround_filtered) > 0:
+        ax.hist(valid_turnaround_filtered, bins=30, edgecolor='black', color=COLOR_WARN)
+        ax.set_xlabel('Minutes')
+        ax.set_ylabel('Frequency')
     st.pyplot(fig)
-
-
+    plt.close()
 
 
 # ── MAIN ──────────────────────────────────────────────────────────────────────
