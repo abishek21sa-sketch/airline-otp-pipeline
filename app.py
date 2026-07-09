@@ -1117,10 +1117,8 @@ def page_aircraft_utilization(df):
 def page_crew_efficiency(df):
     st.header("👨‍✈️ Crew & Aircraft Efficiency")
     
-    # Turnaround time calculation (fix: convert times to datetime format first)
     df_sorted = df.sort_values(['TailNumber', 'FlightDate', 'SchedArr']).copy()
     
-    # Convert integer times (0900) to timedelta for calculation
     def time_to_minutes(time_int):
         """Convert HHMM format to minutes since midnight"""
         if pd.isna(time_int):
@@ -1129,13 +1127,10 @@ def page_crew_efficiency(df):
         minutes = int(time_int) % 100
         return hours * 60 + minutes
     
-    # Get next departure and arrival times
     df_sorted['NextDepartureTime'] = df_sorted.groupby('TailNumber')['SchedDep'].shift(-1)
     df_sorted['ArrivalMinutes'] = df_sorted['SchedArr'].apply(time_to_minutes)
     df_sorted['NextDepartureMinutes'] = df_sorted['NextDepartureTime'].apply(time_to_minutes)
     
-    # Calculate turnaround (next departure - current arrival)
-    # Handle day boundary (if next flight is next day, add 1440 minutes)
     df_sorted['TurnaroundMinutes'] = df_sorted.apply(
         lambda row: row['NextDepartureMinutes'] - row['ArrivalMinutes']
         if pd.notna(row['NextDepartureMinutes']) and pd.notna(row['ArrivalMinutes'])
@@ -1143,11 +1138,9 @@ def page_crew_efficiency(df):
         axis=1
     )
     
-    # Recovery rate: DepDelay > 0 AND ArrDelay <= 15
     recovered = df[(df['DepDelay'] > 0) & (df['ArrDelay'] <= 15)]
     recovery_rate = (len(recovered) / len(df[df['DepDelay'] > 0])) * 100 if len(df[df['DepDelay'] > 0]) > 0 else 0
     
-    # Metrics
     valid_turnaround = df_sorted['TurnaroundMinutes'].dropna()
     if len(valid_turnaround) > 0:
         st.metric("Avg Turnaround Time", f"{valid_turnaround.mean():.0f} min")
@@ -1166,7 +1159,7 @@ def page_crew_efficiency(df):
     ax.set_xlabel('Recovery Rate (%)')
     ax.tick_params(colors=TEXT_COLOR)
     st.pyplot(fig)
-    plt.close()
+    # REMOVED: plt.close()
     
     # Turnaround distribution
     st.subheader("Turnaround Time Distribution")
@@ -1178,7 +1171,7 @@ def page_crew_efficiency(df):
         ax.set_xlabel('Minutes')
         ax.set_ylabel('Frequency')
     st.pyplot(fig)
-    plt.close()
+    # REMOVED: plt.close()
 
 
 # ── MAIN ──────────────────────────────────────────────────────────────────────
